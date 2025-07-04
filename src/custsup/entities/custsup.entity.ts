@@ -243,6 +243,9 @@ export class Custsup {
   })
   password: string;
 
+  @Column({ type: 'varchar', length: 1, default: 'Y', name: 'firstLogin' })
+  firstLogin: string;
+
   @Column({ type: 'text', nullable: true, name: 'refreshToken' })
   refreshToken: string;
 

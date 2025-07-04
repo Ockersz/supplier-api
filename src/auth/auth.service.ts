@@ -68,12 +68,13 @@ export class AuthService {
       name: string;
       username: string;
       email: string;
+      firstLogin: string;
     };
   }> {
     try {
       const user = await this.custsupRepository.findOne({
         where: { username },
-        select: ['id', 'name', 'username', 'email', 'password'],
+        select: ['id', 'name', 'username', 'email', 'password', 'firstLogin'],
       });
 
       if (!user || !user.username || !user.password) {
@@ -112,6 +113,7 @@ export class AuthService {
           name: user.name,
           username: user.username,
           email: user.email,
+          firstLogin: user.firstLogin,
         },
       };
     } catch (error) {
@@ -177,6 +179,100 @@ export class AuthService {
       };
     } catch (error) {
       console.error('Error refreshing tokens:', error);
+      throw error;
+    }
+  }
+
+  async logoutUser(
+    id: number,
+    username: string,
+    inRefreshToken: string,
+  ): Promise<void> {
+    try {
+      const user = await this.custsupRepository.findOne({
+        where: { id, username },
+        select: ['id', 'refreshToken'],
+      });
+
+      if (!user || !user.refreshToken) {
+        throw new ForbiddenException('Invalid Credentials');
+      }
+
+      if (user.refreshToken !== inRefreshToken) {
+        throw new ForbiddenException('Invalid Refresh Token');
+      }
+
+      user.refreshToken = '';
+      await this.custsupRepository.update(user.id, {
+        refreshToken: user.refreshToken,
+      });
+    } catch (error) {
+      console.error('Error logging out user:', error);
+      throw error;
+    }
+  }
+
+  async changePassword(
+    id: number,
+    username: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{
+    id: number;
+    name: string;
+    username: string;
+    email: string;
+    access_token: string;
+    refresh_token: string;
+  }> {
+    try {
+      const user = await this.custsupRepository.findOne({
+        where: { id, username },
+        select: ['id', 'username', 'password', 'name', 'email'],
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with id ${id} not found`);
+      }
+
+      const isOldPasswordValid = bcrypt.compareSync(oldPassword, user.password);
+
+      if (!isOldPasswordValid) {
+        throw new ForbiddenException('Invalid old password');
+      }
+
+      user.password = newPassword;
+      user.firstLogin = 'N';
+
+      const updatedUser = await this.custsupRepository.save(user);
+
+      const access_token = this.jwtService.sign({
+        sub: updatedUser.id,
+        username: updatedUser.username,
+        name: updatedUser.name,
+        email: updatedUser.email,
+      });
+
+      const refresh_token = this.jwtService.sign(
+        {
+          sub: updatedUser.id,
+          username: updatedUser.username,
+          name: updatedUser.name,
+          email: updatedUser.email,
+        },
+        { expiresIn: '7d' },
+      );
+
+      return {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        access_token,
+        refresh_token,
+      };
+    } catch (error) {
+      console.error('Error changing password:', error);
       throw error;
     }
   }
