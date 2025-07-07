@@ -217,6 +217,7 @@ export class AuthService {
     username: string,
     oldPassword: string,
     newPassword: string,
+    email: string,
   ): Promise<{
     id: number;
     name: string;
@@ -243,6 +244,7 @@ export class AuthService {
 
       user.password = newPassword;
       user.firstLogin = 'N';
+      user.email = email;
 
       const updatedUser = await this.custsupRepository.save(user);
 

@@ -149,7 +149,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @Body() body: { oldPassword: string; newPassword: string },
+    @Body() body: { oldPassword: string; newPassword: string; email?: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -168,6 +168,7 @@ export class AuthController {
       username,
       body.oldPassword,
       body.newPassword,
+      body.email || req.user.email, // Use email from request if not provided
     );
     res.cookie('access_token', authData.access_token, {
       httpOnly: true,

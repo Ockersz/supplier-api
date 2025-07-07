@@ -21,8 +21,15 @@ export class CustsupService {
     }
   }
 
-  findOne(id: number): Promise<Custsup | null> {
+  findOne(id: number, userId: number): Promise<Custsup | null> {
     try {
+      if (id <= 0) {
+        return this.custsupRepository.findOne({
+          where: { id: userId },
+          select: ['id', 'name', 'username', 'email'],
+        });
+      }
+
       return this.custsupRepository.findOne({
         where: { id },
         select: ['id', 'name', 'username', 'email'],
