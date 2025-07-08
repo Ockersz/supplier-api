@@ -149,7 +149,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
-    @Body() body: { oldPassword: string; newPassword: string; email?: string },
+    @Body() body: { oldPassword: string; newPassword: string; email: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -158,7 +158,7 @@ export class AuthController {
     }
 
     const { id, username } = req.user;
-    if (!body.oldPassword || !body.newPassword) {
+    if ((!body.oldPassword || !body.newPassword) && !body.email) {
       throw new BadRequestException(
         'Missing required fields: oldPassword or newPassword',
       );
@@ -168,7 +168,7 @@ export class AuthController {
       username,
       body.oldPassword,
       body.newPassword,
-      body.email || req.user.email, // Use email from request if not provided
+      body.email, // Use email from request if not provided
     );
     res.cookie('access_token', authData.access_token, {
       httpOnly: true,
@@ -190,5 +190,17 @@ export class AuthController {
       },
       message: 'Password changed successfully',
     };
+  }
+
+  @Post('/password-reset')
+  @HttpCode(HttpStatus.OK)
+  async passwordReset(
+    @Body() body: { identifier: string },
+  ): Promise<{ email: string | null }> {
+    if (!body.identifier) {
+      throw new BadRequestException('Identifier is required');
+    }
+    const { email } = await this.authService.passwordReset(body.identifier);
+    return { email };
   }
 }

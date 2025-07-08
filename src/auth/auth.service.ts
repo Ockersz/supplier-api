@@ -9,6 +9,8 @@ import { Custsup } from 'src/custsup/entities/custsup.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { MailService } from 'src/mail/mail.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -16,7 +18,17 @@ export class AuthService {
     @InjectRepository(Custsup)
     private custsupRepository: Repository<Custsup>,
     private jwtService: JwtService,
+    private mailService: MailService,
   ) {}
+
+  generateSecurePassword(length = 10): string {
+    const charset =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$!';
+    const bytes = crypto.randomBytes(length);
+    return Array.from(bytes)
+      .map((b) => charset[b % charset.length])
+      .join('');
+  }
 
   async createUser(
     id: number,
@@ -226,56 +238,115 @@ export class AuthService {
     access_token: string;
     refresh_token: string;
   }> {
-    try {
-      const user = await this.custsupRepository.findOne({
-        where: { id, username },
-        select: ['id', 'username', 'password', 'name', 'email'],
-      });
+    const user = await this.custsupRepository.findOne({
+      where: { id, username },
+      select: ['id', 'username', 'password', 'name', 'email'],
+    });
 
-      if (!user) {
-        throw new NotFoundException(`User with id ${id} not found`);
-      }
+    if (!user) {
+      throw new NotFoundException(`User with id ${id} not found`);
+    }
 
+    // Track whether updates are made
+    let updated = false;
+
+    if (newPassword) {
       const isOldPasswordValid = bcrypt.compareSync(oldPassword, user.password);
-
       if (!isOldPasswordValid) {
         throw new ForbiddenException('Invalid old password');
       }
 
       user.password = newPassword;
       user.firstLogin = 'N';
-      user.email = email;
-
-      const updatedUser = await this.custsupRepository.save(user);
-
-      const access_token = this.jwtService.sign({
-        sub: updatedUser.id,
-        username: updatedUser.username,
-        name: updatedUser.name,
-        email: updatedUser.email,
-      });
-
-      const refresh_token = this.jwtService.sign(
-        {
-          sub: updatedUser.id,
-          username: updatedUser.username,
-          name: updatedUser.name,
-          email: updatedUser.email,
-        },
-        { expiresIn: '7d' },
-      );
-
-      return {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        access_token,
-        refresh_token,
-      };
-    } catch (error) {
-      console.error('Error changing password:', error);
-      throw error;
+      updated = true;
     }
+
+    if (email && email !== user.email) {
+      user.email = email;
+      updated = true;
+    }
+
+    if (!updated) {
+      throw new BadRequestException(
+        'Nothing to update: Provide new password or email.',
+      );
+    }
+
+    const updatedUser = await this.custsupRepository.save(user);
+
+    const tokenPayload = {
+      sub: updatedUser.id,
+      username: updatedUser.username,
+      name: updatedUser.name,
+      email: updatedUser.email,
+    };
+
+    const access_token = this.jwtService.sign(tokenPayload);
+    const refresh_token = this.jwtService.sign(tokenPayload, {
+      expiresIn: '7d',
+    });
+
+    return {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      username: updatedUser.username,
+      email: updatedUser.email,
+      access_token,
+      refresh_token,
+    };
+  }
+
+  async passwordReset(identifier: string): Promise<{ email: string }> {
+    const user = await this.custsupRepository.findOne({
+      where: [{ email: identifier }, { username: identifier }],
+      select: ['email', 'id', 'password', 'username', 'name', 'firstLogin'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const randomPassword = this.generateSecurePassword(6);
+
+    user.password = randomPassword;
+    user.firstLogin = 'Y';
+    await this.custsupRepository.save(user);
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; color: #333; font-size: 16px; line-height: 1.6;">
+        <p>Hi <strong>${user.name}</strong>,</p>
+
+        <p>We've successfully reset the password for your account <strong>${user.username}</strong>.</p>
+
+        <p>
+          Please use the following temporary password to log in:
+        </p>
+
+        <p style="font-size: 18px; font-weight: bold; color: #2c3e50;">
+          ${randomPassword}
+        </p>
+
+        <p>
+          For your security, we strongly recommend that you change this password immediately after logging in.
+        </p>
+
+        <p>If you did not request this password reset, please contact our support team as soon as possible.</p>
+
+        <p>Best regards,</p>
+        <p><strong>Earthfoam Support Team</strong></p>
+        <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;" />
+        <small style="color: #777;">This is an automated message. Please do not reply directly to this email.</small>
+      </div>
+    `;
+
+    await this.mailService.sendEmail(
+      user.email,
+      'Earthfoam Password Reset',
+      htmlContent,
+    );
+
+    const hiddenEmail = user.email.replace(/(.{2})(.*)(?=@)/, '$1***');
+
+    return { email: hiddenEmail };
   }
 }

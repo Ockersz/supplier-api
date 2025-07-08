@@ -10,7 +10,7 @@ export class MailService {
       await this.mailerService.sendMail({
         to,
         subject,
-        text: content,
+        html: content,
       });
     } catch (error) {
       console.error(`Failed to send email to ${to}:`, error);
