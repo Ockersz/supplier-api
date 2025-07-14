@@ -236,6 +236,7 @@ export class Custsup {
 
   @Column({
     name: 'password',
+    nullable: true,
     transformer: {
       to: (value: string) => bcrypt.hashSync(value, 10),
       from: (value: string) => value,
