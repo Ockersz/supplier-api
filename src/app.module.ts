@@ -11,6 +11,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { MailModule } from './mail/mail.module';
+import { LatexOrdersModule } from './latex-orders/latex-orders.module';
+import { Ltxinfor } from './latex-orders/ltxinfor.entity';
 
 @Module({
   imports: [
@@ -26,7 +28,7 @@ import { MailModule } from './mail/mail.module';
       username: process.env.DB_USERNAME || 'root',
       password: process.env.DB_PASSWORD || 'password',
       database: process.env.DB_NAME || 'supplier_db',
-      entities: [Custsup],
+      entities: [Custsup, Ltxinfor],
       synchronize: true,
     }),
     ThrottlerModule.forRoot({
@@ -41,6 +43,8 @@ import { MailModule } from './mail/mail.module';
     AuthModule,
 
     MailModule,
+
+    LatexOrdersModule,
   ],
   controllers: [AppController],
   providers: [
